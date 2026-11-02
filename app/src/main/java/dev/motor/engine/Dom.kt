@@ -7,5 +7,6 @@ class Element(
     val attrs: Map<String, String>,
     var parent: Element? = null
 ) : Node() {
+    val depth: Int = (parent?.depth ?: -1) + 1
     val children = mutableListOf<Node>()
 }

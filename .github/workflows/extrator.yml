@@ -3,7 +3,11 @@ name: Extrair e Salvar WebZero
 on:
   push:
     branches: [ "principal" ]
-  workflow_dispatch: # Adiciona um botão para rodar manualmente
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  workflows: write
 
 jobs:
   extract-and-commit:
@@ -20,6 +24,6 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add .
-          git commit -m "Extraindo arquivos do WebZero.zip automaticamente" || echo "Nenhuma alteração para enviar"
+          git commit -m "Extraindo arquivos automaticamente" || echo "Nenhuma alteração para enviar"
           git push
           

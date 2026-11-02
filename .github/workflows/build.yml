@@ -25,3 +25,4 @@ jobs:
         with:
           name: MotorBrowser-apk
           path: app/build/outputs/apk/debug/*.apk
+          

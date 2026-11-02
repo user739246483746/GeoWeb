@@ -14,11 +14,13 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
 import dev.motor.engine.Block
+import dev.motor.engine.Call
 import dev.motor.engine.Http
 import dev.motor.engine.HtmlParser
 import dev.motor.engine.LayoutBuilder
 import dev.motor.engine.PageLayout
 import dev.motor.engine.RenderView
+import dev.motor.engine.Sanitize
 import java.net.URLEncoder
 import java.util.concurrent.Executors
 
@@ -30,7 +32,8 @@ class MainActivity : Activity() {
     private val history = ArrayList<String>()
     private var current: String? = null
     private var token = 0
-    private val io = Executors.newSingleThreadExecutor()
+    private var call: Call? = null
+    private val io = Executors.newCachedThreadPool()
     private val ui = Handler(Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -60,16 +63,17 @@ class MainActivity : Activity() {
         setContentView(root)
 
         val home = "<h1>Motor Browser</h1><p>Navegador com <b>motor próprio</b>: sem Chromium, sem Firefox, sem WebView.</p>" +
-            "<p>Teste: <a href=\"https://info.cern.ch\">info.cern.ch</a> (primeiro site da história) " +
-            "ou <a href=\"https://example.com\">example.com</a>.</p>"
-        show(LayoutBuilder.build(HtmlParser.parse(home), "about:home"))
+            "<p>Só HTTPS, sem cookies, sem rastreio, sem JavaScript.</p>" +
+            "<p>Teste: <a href=\"https://info.cern.ch\">info.cern.ch</a> ou <a href=\"https://example.com\">example.com</a>.</p>"
+        show(LayoutBuilder.build(HtmlParser.parse(home), "https://about.invalid/"))
     }
 
+    // Só monta a string; quem valida de verdade é o UrlGuard (esquema, host, porta, tamanho).
     private fun normalize(s: String): String {
         val t = s.trim()
         return when {
             t.contains("://") -> t
-            t.contains(" ") || !t.contains(".") ->
+            t.contains(' ') || !t.contains('.') ->
                 "https://html.duckduckgo.com/html/?q=" + URLEncoder.encode(t, "UTF-8")
             else -> "https://$t"
         }
@@ -82,23 +86,33 @@ class MainActivity : Activity() {
     }
 
     private fun navigate(url: String, push: Boolean = true) {
+        call?.cancel()                 // cancela de verdade a requisição anterior
+        val c = Call()
+        call = c
         val t = ++token
         bar.visibility = View.VISIBLE
         io.execute {
-            var finalUrl = url
+            var finalUrl: String? = null
             val layout = try {
-                val r = Http.get(url)
+                val r = Http.get(url, c)
                 finalUrl = r.url
                 LayoutBuilder.build(HtmlParser.parse(r.body), r.url)
-            } catch (e: Exception) {
-                PageLayout("Erro", listOf(Block("Não foi possível carregar\n$url\n\n${e.message}", 16f)))
+            } catch (e: Throwable) {   // inclui OutOfMemoryError e StackOverflowError
+                val msg = Sanitize.text(e.message ?: e.javaClass.simpleName).take(300)
+                PageLayout("Erro", listOf(Block("Não foi possível carregar a página.\n\n$msg", 16f)))
             }
             ui.post {
                 if (t != token) return@post
                 bar.visibility = View.GONE
-                if (push) current?.let { history.add(it) }
-                current = finalUrl
-                address.setText(finalUrl)
+                val ok = finalUrl
+                if (ok != null) {
+                    if (push) current?.let {
+                        history.add(it)
+                        if (history.size > 100) history.removeAt(0)
+                    }
+                    current = ok
+                    address.setText(ok)
+                }
                 show(layout)
             }
         }
@@ -107,5 +121,11 @@ class MainActivity : Activity() {
     @Suppress("DEPRECATION")
     override fun onBackPressed() {
         if (history.isNotEmpty()) navigate(history.removeAt(history.size - 1), false) else super.onBackPressed()
+    }
+
+    override fun onDestroy() {
+        call?.cancel()
+        io.shutdownNow()
+        super.onDestroy()
     }
 }

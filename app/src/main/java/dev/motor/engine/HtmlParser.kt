@@ -4,13 +4,17 @@ package dev.motor.engine
 object HtmlParser {
     private val voids = setOf("area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr")
     private val rawText = setOf("script", "style")
+    private const val MAX_NODES = 200_000
+    private const val MAX_DEPTH = 256
 
     fun parse(html: String): Element {
         val root = Element("#root", emptyMap())
         var cur = root
         var i = 0
+        var count = 0
         val n = html.length
         while (i < n) {
+            if (++count > MAX_NODES) break   // limite contra páginas-bomba
             if (html[i] != '<') {
                 val e = html.indexOf('<', i)
                 val end = if (e < 0) n else e
@@ -80,7 +84,7 @@ object HtmlParser {
                         if (name == "style") el.children.add(Text(html.substring(i, ce))) // para o parser CSS futuro
                         i = if (close < 0) n else html.indexOf('>', close).let { if (it < 0) n else it + 1 }
                     } else if (name !in voids) {
-                        cur = el
+                        if (el.depth < MAX_DEPTH) cur = el   // aninhamento absurdo vira irmão (evita estouro de pilha)
                     }
                 }
                 else -> { cur.children.add(Text("<")); i++ }

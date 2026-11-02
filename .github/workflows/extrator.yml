@@ -3,6 +3,7 @@ name: Extrair e Salvar WebZero
 on:
   push:
     branches: [ "principal" ]
+  workflow_dispatch: # Adiciona um botão para rodar manualmente
 
 jobs:
   extract-and-commit:

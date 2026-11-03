@@ -1,6 +1,5 @@
 package dev.motor.engine
 
-/** Remove caracteres de controle e de direção de texto (bidi) usados para falsificar o que o usuário lê. */
 object Sanitize {
     private fun bad(c: Char) =
         (c.isISOControl() && c != '\n' && c != '\t') ||

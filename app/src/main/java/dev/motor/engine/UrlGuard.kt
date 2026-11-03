@@ -5,13 +5,11 @@ import java.net.URI
 
 class UrlException(msg: String) : Exception(msg)
 
-/** Única porta de entrada para URLs: tudo que vira requisição passa por aqui. */
 object UrlGuard {
     private const val MAX_LEN = 2048
     private val hostRe = Regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$")
     private const val UNSAFE = "\"<>\\^`{|}[]"
 
-    /** Aceita só http/https (http é promovido a https). Devolve a URL canônica, sempre https. */
     fun check(raw: String): String {
         val s = raw.trim()
         if (s.isEmpty() || s.length > MAX_LEN) throw UrlException("Endereço vazio ou longo demais")
@@ -32,10 +30,9 @@ object UrlGuard {
         val portPart = if (port == 8443) ":8443" else ""
         val path = u.rawPath.let { if (it.isNullOrEmpty()) "/" else it }
         val query = u.rawQuery?.let { "?$it" } ?: ""
-        return "https://$host$portPart$path$query"   // fragmento (#) nunca sai do aparelho
+        return "https://$host$portPart$path$query"
     }
 
-    /** Bloqueia destinos em rede local/privada (proteção contra redirecionamento para roteador/intranet). */
     fun assertPublicHost(host: String) {
         val addrs = try { InetAddress.getAllByName(host) } catch (e: Exception) {
             throw UrlException("Não foi possível resolver o endereço")
@@ -52,11 +49,11 @@ object UrlGuard {
             val b0 = b[0].toInt() and 255
             val b1 = b[1].toInt() and 255
             if (b0 == 0 || b0 >= 240) return true
-            if (b0 == 100 && b1 in 64..127) return true      // CGNAT
+            if (b0 == 100 && b1 in 64..127) return true
             if (b0 == 198 && (b1 == 18 || b1 == 19)) return true
             if (b0 == 192 && b1 == 0) return true
         } else if (b.size == 16) {
-            if ((b[0].toInt() and 0xFE) == 0xFC) return true // fc00::/7
+            if ((b[0].toInt() and 0xFE) == 0xFC) return true
         }
         return false
     }

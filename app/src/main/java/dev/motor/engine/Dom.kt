@@ -9,4 +9,8 @@ class Element(
 ) : Node() {
     val depth: Int = (parent?.depth ?: -1) + 1
     val children = mutableListOf<Node>()
+    val id: String? get() = attrs["id"]
+    val classList: List<String> by lazy {
+        (attrs["class"] ?: "").split(' ', '\t', '\n', '\r').filter { it.isNotEmpty() }
+    }
 }

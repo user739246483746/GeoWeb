@@ -13,16 +13,17 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
-import dev.motor.engine.Block
 import dev.motor.engine.Call
 import dev.motor.engine.Http
 import dev.motor.engine.HtmlParser
+import dev.motor.engine.Images
 import dev.motor.engine.LayoutBuilder
 import dev.motor.engine.PageLayout
 import dev.motor.engine.RenderView
 import dev.motor.engine.Sanitize
 import java.net.URLEncoder
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicLong
 
 class MainActivity : Activity() {
     private lateinit var address: EditText
@@ -35,6 +36,9 @@ class MainActivity : Activity() {
     private var call: Call? = null
     private val io = Executors.newCachedThreadPool()
     private val ui = Handler(Looper.getMainLooper())
+
+    private fun vw(): Float = resources.displayMetrics.widthPixels / resources.displayMetrics.density
+    private fun vh(): Float = resources.displayMetrics.heightPixels / resources.displayMetrics.density
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -65,7 +69,7 @@ class MainActivity : Activity() {
         val home = "<h1>Motor Browser</h1><p>Navegador com <b>motor próprio</b>: sem Chromium, sem Firefox, sem WebView.</p>" +
             "<p>Só HTTPS, sem cookies, sem rastreio, sem JavaScript.</p>" +
             "<p>Teste: <a href=\"https://info.cern.ch\">info.cern.ch</a> ou <a href=\"https://example.com\">example.com</a>.</p>"
-        show(LayoutBuilder.build(HtmlParser.parse(home), "https://about.invalid/"))
+        show(LayoutBuilder.build(HtmlParser.parse(home), "https://about.invalid/", emptyList(), vw(), vh()))
     }
 
     // Só monta a string; quem valida de verdade é o UrlGuard (esquema, host, porta, tamanho).
@@ -81,7 +85,7 @@ class MainActivity : Activity() {
 
     private fun show(layout: PageLayout) {
         title = layout.title.ifBlank { "Motor Browser" }
-        page.show(layout.blocks)
+        page.show(layout)
         scroll.scrollTo(0, 0)
     }
 
@@ -96,10 +100,24 @@ class MainActivity : Activity() {
             val layout = try {
                 val r = Http.get(url, c)
                 finalUrl = r.url
-                LayoutBuilder.build(HtmlParser.parse(r.body), r.url)
+                val dom = HtmlParser.parse(r.body)
+                val sheets = ArrayList<String>()
+                var external = 0
+                for (ref in LayoutBuilder.sheetRefs(dom, r.url)) {
+                    if (t != token) break
+                    val inline = ref.css
+                    val href = ref.href
+                    if (inline != null) {
+                        sheets.add(inline)
+                    } else if (href != null && external < 8) {
+                        external++
+                        try { sheets.add(Http.get(href, c).body) } catch (e: Exception) { }
+                    }
+                }
+                LayoutBuilder.build(dom, r.url, sheets, vw(), vh())
             } catch (e: Throwable) {   // inclui OutOfMemoryError e StackOverflowError
                 val msg = Sanitize.text(e.message ?: e.javaClass.simpleName).take(300)
-                PageLayout("Erro", listOf(Block("Não foi possível carregar a página.\n\n$msg", 16f)))
+                LayoutBuilder.plain("Erro", "Não foi possível carregar a página.\n\n$msg")
             }
             ui.post {
                 if (t != token) return@post
@@ -114,6 +132,16 @@ class MainActivity : Activity() {
                     address.setText(ok)
                 }
                 show(layout)
+            }
+            // Imagens carregam depois, sem travar a página.
+            val used = AtomicLong(0)
+            for (img in layout.images) {
+                if (t != token) break
+                try {
+                    if (Images.load(img, c, 2048, used)) {
+                        ui.post { if (t == token) page.relayout() }
+                    }
+                } catch (e: Throwable) { }
             }
         }
     }
